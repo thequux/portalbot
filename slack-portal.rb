@@ -24,41 +24,43 @@ end
 client.on :message do |data|
   unless client.self['id'] == data['user']
     case data['text']
-    when /^bot/, /^portal/
+    when /^portal (from|to) <#(C.*?)>/
+      match = /^portal (from|to) <#(C.*?)>/.match(data['text'])
+      
+      target_channel = match[2]
+      source_channel = data['channel']
+      if match[1] == 'from'
+        target_channel, source_channel = source_channel, target_channel
+      end
 
-      if data['text'] =~ /<#C.*?>/
-        target_channel = data['text'][/<#(C.*?)>/, 1] 
-        source_channel = data['channel']
+      base_message = {unfurl_links: 'false', unfurl_media: 'false', as_user: 'true'}
 
-        base_message = {unfurl_links: 'false', unfurl_media: 'false', as_user: 'true'}
+      begin
+        source_message = base_message.merge(channel: source_channel, text: "opening portal to <##{target_channel}>...")
+        source_response = client.web_client.chat_postMessage(source_message)
+      rescue Slack::Web::Api::Error => e
+        client.web_client.chat_postMessage base_message.merge(channel: source_channel, text: "Encountered error: #{e}, in: immediate reply. Restarting...")
+        return
+      end
 
-        begin
-          source_message = base_message.merge(channel: source_channel, text: "opening portal to <##{target_channel}>...")
-          source_response = client.web_client.chat_postMessage(source_message)
-        rescue Slack::Web::Api::Error => e
-          client.web_client.chat_postMessage base_message.merge(channel: source_channel, text: "Encountered error: #{e}, in: immediate reply. Restarting...")
+      begin
+        target_message = base_message.merge(channel: target_channel, text: "portal from <##{source_channel}>:\n :blueportal: #{client.url_of(source_response)}")
+        target_response = client.web_client.chat_postMessage(target_message)
+      rescue Slack::Web::Api::Error => e
+        if e.message == 'not_in_channel'
+          client.web_client.chat_postMessage base_message.merge(channel: source_channel, text: "Encountered error: #{e}. I haven't been invited to <##{target_channel}> yet. Use the command `/invite @portal_bot` in that channel to invite me. Restarting...", mrkdown: 'true')
+          return
+        else  
+          client.web_client.chat_postMessage base_message.merge(channel: source_channel, text: "Encountered error: #{e}, in: post to target channel. Restarting...")
           return
         end
+      end
 
-        begin
-          target_message = base_message.merge(channel: target_channel, text: "portal from <##{source_channel}>:\n :blueportal: #{client.url_of(source_response)}")
-          target_response = client.web_client.chat_postMessage(target_message)
-        rescue Slack::Web::Api::Error => e
-          if e.message == 'not_in_channel'
-            client.web_client.chat_postMessage base_message.merge(channel: source_channel, text: "Encountered error: #{e}. I haven't been invited to <##{target_channel}> yet. Use the command `/invite @portal_bot` in that channel to invite me. Restarting...", mrkdown: 'true')
-            return
-          else  
-            client.web_client.chat_postMessage base_message.merge(channel: source_channel, text: "Encountered error: #{e}, in: post to target channel. Restarting...")
-            return
-          end
-        end
-
-        begin
-          client.web_client.chat_update(ts: source_response['ts'], channel: source_channel, text: "portal to <##{target_channel}>:\n :orangeportal: #{client.url_of(target_response)}")
-        rescue Slack::Web::Api::Error => e
-          client.web_client.chat_postMessage base_message.merge(channel: source_channel, text: "Encountered error: #{e}, in: update message. Restarting...")
-          return
-        end
+      begin
+        client.web_client.chat_update(ts: source_response['ts'], channel: source_channel, text: "portal to <##{target_channel}>:\n :orangeportal: #{client.url_of(target_response)}")
+      rescue Slack::Web::Api::Error => e
+        client.web_client.chat_postMessage base_message.merge(channel: source_channel, text: "Encountered error: #{e}, in: update message. Restarting...")
+        return
       end
     end
   end
