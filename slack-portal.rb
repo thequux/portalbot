@@ -1,3 +1,7 @@
+#!/usr/bin/env ruby
+# See LICENSE for the needlessly onerous conditions this file is
+# licensed under.
+
 require 'rubygems'
 require 'bundler/setup'
 
@@ -7,7 +11,7 @@ require 'slack-ruby-client'
 
 class Slack::RealTime::Client
   def url_of data
-    "https://#{team['domain']}.slack.com/archives/" + channels.find { |ch| ch["id"] == data['channel'] }["name"] + "/p" + data['ts'].delete('.')
+    "https://#{team['domain']}.slack.com/archives/" + channels[data['channel']].name + "/p" + data['ts'].delete('.')
   end
 end
 
@@ -24,8 +28,8 @@ end
 client.on :message do |data|
   unless client.self['id'] == data['user']
     case data['text']
-    when /^portal (from|to) <#(C.*?)>/
-      match = /^portal (from|to) <#(C.*?)>/.match(data['text'])
+    when /^portal (from|to) <#(C[^|>]*?)(?:\|[^>]*)?>/
+      match = /^portal (from|to) <#(C[^|>]*?)(?:\|[^>]*)?>/.match(data['text'])
       
       target_channel = match[2]
       source_channel = data['channel']
@@ -40,7 +44,7 @@ client.on :message do |data|
         source_response = client.web_client.chat_postMessage(source_message)
       rescue Slack::Web::Api::Error => e
         client.web_client.chat_postMessage base_message.merge(channel: source_channel, text: "Encountered error: #{e}, in: immediate reply. Restarting...")
-        return
+        next
       end
 
       begin
@@ -49,10 +53,10 @@ client.on :message do |data|
       rescue Slack::Web::Api::Error => e
         if e.message == 'not_in_channel'
           client.web_client.chat_postMessage base_message.merge(channel: source_channel, text: "Encountered error: #{e}. I haven't been invited to <##{target_channel}> yet. Use the command `/invite @portal_bot` in that channel to invite me. Restarting...", mrkdown: 'true')
-          return
+          next
         else  
           client.web_client.chat_postMessage base_message.merge(channel: source_channel, text: "Encountered error: #{e}, in: post to target channel. Restarting...")
-          return
+          next
         end
       end
 
@@ -60,7 +64,7 @@ client.on :message do |data|
         client.web_client.chat_update(ts: source_response['ts'], channel: source_channel, text: "portal to <##{target_channel}>:\n :orangeportal: #{client.url_of(target_response)}")
       rescue Slack::Web::Api::Error => e
         client.web_client.chat_postMessage base_message.merge(channel: source_channel, text: "Encountered error: #{e}, in: update message. Restarting...")
-        return
+        next
       end
     end
   end
