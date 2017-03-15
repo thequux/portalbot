@@ -4,3 +4,4 @@ ruby '2.4'
 gem 'slack-ruby-client'
 
 gem 'dotenv', group: :development
+gem 'celluloid-io'
